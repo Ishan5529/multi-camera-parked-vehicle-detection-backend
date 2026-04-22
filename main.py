@@ -1,11 +1,35 @@
 """
 FastAPI backend server for multi-camera parked vehicle detection.
 """
+from dotenv import load_dotenv
+load_dotenv()
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 from routers import config, predict, parking
+
+
+def parse_bool(value: str, default: bool = False) -> bool:
+    """Parse common truthy values from environment variables."""
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def parse_origins(value: str) -> list[str]:
+    """Parse comma-separated CORS origins; fallback to wildcard when unset."""
+    if not value:
+        return ["*"]
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
+CORS_ORIGINS = parse_origins(os.getenv("CORS_ORIGINS", ""))
+ALLOW_CREDENTIALS = parse_bool(os.getenv("CORS_ALLOW_CREDENTIALS"), default=False)
+APP_HOST = os.getenv("HOST", os.getenv("SERVER_HOST", "0.0.0.0"))
+APP_PORT = int(os.getenv("PORT", os.getenv("SERVER_PORT", "8000")))
+APP_RELOAD = parse_bool(os.getenv("DEBUG"), default=False)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -17,8 +41,8 @@ app = FastAPI(
 # Add CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update this with specific origins in production
-    allow_credentials=True,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -57,11 +81,11 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=8001,
-        reload=True,
-        log_level="info"
+        host=APP_HOST,
+        port=APP_PORT,
+        reload=APP_RELOAD,
+        log_level=LOG_LEVEL,
     )

@@ -119,7 +119,7 @@ async def fetch_nearby_parking_lots(request: LocationRequest) -> FetchParkingRes
         ]
 
         # Use Haversine distance to keep and rank nearby lots.
-        max_distance_km = 10.0
+        max_distance_km = 20.0
         lots_with_distance = [
             (lot, calculate_distance(latitude, longitude, lot.lat, lot.lng))
             for lot in mock_parking_lots
