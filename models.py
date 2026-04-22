@@ -3,7 +3,7 @@ Pydantic models for request and response validation.
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 class Coordinate(BaseModel):
@@ -17,12 +17,18 @@ class Coordinate(BaseModel):
     rotation: float = 0.0
 
 
+class Frame(BaseModel):
+    """Frame dimensions model."""
+    width: int
+    height: int
+
+
 class Snapshot(BaseModel):
     """Snapshot model for prediction."""
     cameraId: str
     cameraName: str
     image: str  # Base64 encoded image
-    frame: Optional[int] = None
+    frame: Optional[Union[int, Frame]] = None
     annotations: Optional[List[Coordinate]] = []
     coordinates: Optional[List[Coordinate]] = []
 
