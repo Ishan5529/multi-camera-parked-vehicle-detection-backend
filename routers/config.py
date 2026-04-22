@@ -1,0 +1,54 @@
+"""
+Controllers for parking configuration endpoints.
+"""
+
+from fastapi import APIRouter, HTTPException, status
+from models import UpdateConfigRequest, UpdateConfigResponse
+import uuid as uuid_lib
+
+router = APIRouter(tags=["Configuration"])
+
+
+@router.post("/update_config", response_model=UpdateConfigResponse)
+async def update_parking_configuration(config: UpdateConfigRequest):
+    """
+    Update parking lot configuration.
+    
+    Args:
+        config: Configuration update request containing parking lot name, address, and UUID
+        
+    Returns:
+        UpdateConfigResponse with the configuration UUID
+        
+    Raises:
+        HTTPException: If configuration is invalid
+    """
+    try:
+        # Extract UUID - try all possible field names from frontend
+        config_uuid = (config.uuid or config.configUuid or config.config_uuid or "").strip()
+        
+        if not config_uuid:
+            # Generate new UUID if none provided
+            config_uuid = str(uuid_lib.uuid4())
+        
+        parking_lot_name = (config.parkingLotName or config.parking_lot_name or "").strip()
+        parking_lot_address = (config.parkingLotAddress or config.parking_lot_address or "").strip()
+        
+        if not parking_lot_name or not parking_lot_address:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parking lot name and address are required"
+            )
+        
+        # TODO: Implement actual configuration storage logic (database, file, etc.)
+        # For now, just return the UUID
+        
+        return UpdateConfigResponse(uuid=config_uuid)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update parking configuration: {str(e)}"
+        )

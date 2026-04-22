@@ -5,6 +5,7 @@ FastAPI backend server for multi-camera parked vehicle detection.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from routers import config, predict, parking
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -21,6 +22,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(config.router)
+app.include_router(predict.router)
+app.include_router(parking.router)
 
 
 # Health check endpoint
@@ -55,7 +61,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8001,
         reload=True,
         log_level="info"
     )
