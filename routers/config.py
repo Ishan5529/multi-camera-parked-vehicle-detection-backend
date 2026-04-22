@@ -2,7 +2,11 @@
 Controllers for parking configuration endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from database import get_db
+from db_models import ParkingConfiguration
 from models import UpdateConfigRequest, UpdateConfigResponse
 import uuid as uuid_lib
 
@@ -10,7 +14,7 @@ router = APIRouter(tags=["Configuration"])
 
 
 @router.post("/update_config", response_model=UpdateConfigResponse)
-async def update_parking_configuration(config: UpdateConfigRequest):
+async def update_parking_configuration(config: UpdateConfigRequest, db: Session = Depends(get_db)):
     """
     Update parking lot configuration.
     
@@ -40,9 +44,23 @@ async def update_parking_configuration(config: UpdateConfigRequest):
                 detail="Parking lot name and address are required"
             )
         
-        # TODO: Implement actual configuration storage logic (database, file, etc.)
-        # For now, just return the UUID
-        
+        existing_record = db.query(ParkingConfiguration).filter(ParkingConfiguration.uuid == config_uuid).first()
+
+        if existing_record:
+            existing_record.parking_lot_name = parking_lot_name
+            existing_record.parking_lot_address = parking_lot_address
+        else:
+            db.add(
+                ParkingConfiguration(
+                    uuid=config_uuid,
+                    parking_lot_name=parking_lot_name,
+                    parking_lot_address=parking_lot_address,
+                    vacant_lot=0,
+                )
+            )
+
+        db.commit()
+
         return UpdateConfigResponse(uuid=config_uuid)
         
     except HTTPException:

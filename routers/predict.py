@@ -2,15 +2,19 @@
 Controllers for prediction endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from database import get_db
+from db_models import ParkingConfiguration
 from models import PredictRequest
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 router = APIRouter(tags=["Prediction"])
 
 
 @router.post("/predict")
-async def predict_parked_vehicles(request: PredictRequest) -> Dict[str, Any]:
+async def predict_parked_vehicles(request: PredictRequest, db: Session = Depends(get_db)) -> Dict[str, Any]:
     """
     Send snapshots for vehicle detection and prediction.
     
@@ -38,6 +42,16 @@ async def predict_parked_vehicles(request: PredictRequest) -> Dict[str, Any]:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="At least one snapshot is required for prediction"
             )
+
+        parking_configuration = (
+            db.query(ParkingConfiguration).filter(ParkingConfiguration.uuid == config_uuid).first()
+        )
+
+        if parking_configuration is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parking configuration not found"
+            )
         
         # Validate snapshots
         for snapshot in snapshots:
@@ -59,12 +73,16 @@ async def predict_parked_vehicles(request: PredictRequest) -> Dict[str, Any]:
         # 3. Process coordinates and annotations
         # 4. Return prediction results
         
-        # Mock response structure
+        vacant_lot = len(snapshots)
+        parking_configuration.vacant_lot = vacant_lot
+        db.commit()
+
         prediction_results = {
             "uuid": config_uuid,
             "status": "success",
             "detected_vehicles": len(snapshots),
             "snapshots_processed": len(snapshots),
+            "vacant_lot": vacant_lot,
             "results": [
                 {
                     "cameraId": snapshot.cameraId,

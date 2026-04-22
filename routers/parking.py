@@ -2,10 +2,15 @@
 Controllers for parking lot discovery endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, status
-from models import LocationRequest, ParkingLot, FetchParkingResponse
-from typing import List
 import math
+from typing import List, Optional, Tuple
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from database import get_db
+from db_models import ParkingConfiguration
+from models import FetchParkingResponse, LocationRequest, ParkingLot
 
 router = APIRouter(tags=["Parking"])
 
@@ -34,8 +39,26 @@ def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
     return R * c
 
 
+def parse_lat_lng(address: str) -> Optional[Tuple[float, float]]:
+    """Parse coordinates stored as 'lat, lng' in the parking_lot_address field."""
+    if not address:
+        return None
+
+    parts = [part.strip() for part in address.split(", ")]
+    if len(parts) != 2:
+        return None
+
+    try:
+        latitude = float(parts[0])
+        longitude = float(parts[1])
+    except (TypeError, ValueError):
+        return None
+
+    return latitude, longitude
+
+
 @router.post("/fetch_parking", response_model=FetchParkingResponse, response_model_exclude_none=True)
-async def fetch_nearby_parking_lots(request: LocationRequest) -> FetchParkingResponse:
+async def fetch_nearby_parking_lots(request: LocationRequest, db: Session = Depends(get_db)) -> FetchParkingResponse:
     """
     Fetch nearby parking lots based on current location.
     
@@ -79,59 +102,35 @@ async def fetch_nearby_parking_lots(request: LocationRequest) -> FetchParkingRes
                 detail="Invalid coordinate ranges. Latitude must be -90 to 90, Longitude must be -180 to 180"
             )
         
-        # TODO: Implement actual parking lot database query
-        # This would typically:
-        # 1. Query parking lot database
-        # 2. Filter by proximity to user location
-        # 3. Calculate actual distances
-        # 4. Fetch real-time availability data
-        
-        # Mock parking lots data
-        mock_parking_lots: List[ParkingLot] = [
-            ParkingLot(
-                id="parking-lot-1",
-                name="Downtown Parking",
-                lat=latitude + 0.01,
-                lng=longitude + 0.01,
-                vacantSlots=25
-            ),
-            ParkingLot(
-                id="parking-lot-2",
-                name="Mall Parking",
-                lat=latitude - 0.02,
-                lng=longitude + 0.02,
-                vacantSlots=42
-            ),
-            ParkingLot(
-                id="parking-lot-3",
-                name="Airport Parking",
-                lat=latitude + 0.03,
-                lng=longitude - 0.03,
-                vacantSlots=15
-            ),
-            ParkingLot(
-                id="parking-lot-4",
-                name="Airport Parking - 2",
-                lat=latitude + 0.04,
-                lng=longitude - 0.04,
-                vacantSlots=15
-            ),
-        ]
+        parking_configurations = db.query(ParkingConfiguration).all()
+
+        parking_lots: List[ParkingLot] = []
+        for configuration in parking_configurations:
+            coordinates = parse_lat_lng(configuration.parking_lot_address)
+            if coordinates is None:
+                continue
+
+            lot_lat, lot_lng = coordinates
+            parking_lots.append(
+                ParkingLot(
+                    id=configuration.uuid,
+                    name=configuration.parking_lot_name,
+                    lat=lot_lat,
+                    lng=lot_lng,
+                    vacantSlots=configuration.vacant_lot,
+                )
+            )
 
         # Use Haversine distance to keep and rank nearby lots.
         max_distance_km = 20.0
         lots_with_distance = [
             (lot, calculate_distance(latitude, longitude, lot.lat, lot.lng))
-            for lot in mock_parking_lots
+            for lot in parking_lots
         ]
 
         nearby_lots = [
             lot for lot, distance_km in lots_with_distance if distance_km <= max_distance_km
         ]
-
-        # nearby_lots.sort(
-        #     key=lambda lot: calculate_distance(latitude, longitude, lot.lat, lot.lng)
-        # )
 
         return FetchParkingResponse(parkingLots=nearby_lots)
         

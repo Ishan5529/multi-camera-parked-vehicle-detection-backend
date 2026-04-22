@@ -7,6 +7,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from database import init_db
 from routers import config, predict, parking
 
 
@@ -51,6 +52,12 @@ app.add_middleware(
 app.include_router(config.router)
 app.include_router(predict.router)
 app.include_router(parking.router)
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    """Initialize database tables before serving requests."""
+    init_db()
 
 
 # Health check endpoint
