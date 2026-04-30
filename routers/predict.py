@@ -3,8 +3,8 @@ Controllers for prediction endpoints.
 """
 
 import base64
-import numpy as np
 from io import BytesIO
+from pathlib import Path
 from PIL import Image
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -13,6 +13,30 @@ from database import get_db
 from db_models import ParkingConfiguration
 from models import PredictRequest
 from typing import Dict, Any
+
+
+_MODEL_PATH = Path(__file__).resolve().parent.parent / "trained_model.pt"
+_YOLO_MODEL = None
+
+
+def get_classifier_model():
+    """Load YOLOv8 classification model once and reuse it."""
+    global _YOLO_MODEL
+
+    if _YOLO_MODEL is not None:
+        return _YOLO_MODEL
+
+    if not _MODEL_PATH.exists():
+        raise FileNotFoundError(f"Model file not found at {_MODEL_PATH}")
+    try:
+        from ultralytics import YOLO
+    except ImportError as exc:
+        raise ImportError(
+            "Missing dependency 'ultralytics'. Install it with: pip install ultralytics"
+        ) from exc
+
+    _YOLO_MODEL = YOLO(str(_MODEL_PATH))
+    return _YOLO_MODEL
 
 
 def decode_base64_image(image_str: str) -> Image.Image:
@@ -79,7 +103,7 @@ def crop_bounding_box(image: Image.Image, x: float, y: float, width: float, heig
 
 def predict_vehicle_in_slot(image: Image.Image) -> int:
     """
-    Placeholder binary classifier to predict if a parking slot is empty or filled.
+    Run YOLOv8 classification to predict if a parking slot is empty or filled.
     
     Args:
         image: PIL Image object (cropped parking slot)
@@ -87,22 +111,19 @@ def predict_vehicle_in_slot(image: Image.Image) -> int:
     Returns:
         1 if slot is empty, 0 if slot is filled
     """
-    # TODO: Replace with actual ML model inference
-    # For now, return a placeholder value based on image analysis
-    # This can be replaced with a real classifier that uses TensorFlow, PyTorch, etc.
-    
-    # Placeholder logic: analyzing image properties
-    # In production, this would call a pre-trained model
-    img_array = np.array(image)
-    
-    # Simple heuristic for placeholder: average brightness
-    # (Empty slots tend to be brighter, but this is just a placeholder)
-    avg_brightness = np.mean(img_array)
-    
-    # Placeholder decision (replace with actual model)
-    is_empty = avg_brightness > 100  # arbitrary threshold for demo
-    
-    return 1 if is_empty else 0
+    model = get_classifier_model()
+    inference = model.predict(source=image, verbose=False)
+
+    if not inference:
+        raise ValueError("Model returned no prediction output")
+
+    result = inference[0]
+    if result.probs is None:
+        raise ValueError("Classification probabilities missing from model output")
+
+    class_name = result.probs.top1
+
+    return 0 if class_name else 1
 
 
 router = APIRouter(tags=["Prediction"])
